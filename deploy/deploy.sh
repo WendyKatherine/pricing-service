@@ -17,14 +17,23 @@ cd "$SERVICE_DIR" || error "Directory $SERVICE_DIR not found"
 log "Pulling latest images..."
 docker compose -f "$COMPOSE_FILE" pull || error "Pull failed"
 
+log "Running database migrations..."
+docker compose -f "$COMPOSE_FILE" run --rm pricing-api npm run migrate || error "Migration failed"
+
 log "Starting services..."
 docker compose -f "$COMPOSE_FILE" up -d || error "Up failed"
 
-log "Waiting for API healthcheck..."
+log "Waiting for API readiness (DB connected)..."
 for i in $(seq 1 12); do
-  if curl -sf http://localhost:3001/health > /dev/null 2>&1; then
-    log "✓ API is healthy"
+  READY=$(curl -sf http://localhost:3001/ready 2>/dev/null || echo "")
+  if echo "$READY" | grep -q '"db":"connected"'; then
+    log "✓ API is ready (DB connected)"
     break
+  fi
+  if [ "$i" -eq 12 ]; then
+    error "API not ready after 12 attempts — rolling back"
+    docker compose -f "$COMPOSE_FILE" down
+    exit 1
   fi
   log "  attempt $i/12 — waiting..."
   sleep 5
