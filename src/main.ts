@@ -1,14 +1,22 @@
 import { buildServer } from "./infrastructure/http/server";
 import { env } from "./infrastructure/config/env";
+import { createPool } from "./infrastructure/db/pool";
+import { PostgresPriceBookRepository } from "./infrastructure/repositories/PostgresPriceBookRepository";
+import { readyRoute } from "./infrastructure/http/routes/ready.route";
 
 async function main() {
+  const pool = createPool();
+  const priceBookRepository = new PostgresPriceBookRepository(pool);
+
   const app = buildServer();
+
+  app.register(readyRoute, { pool });
 
   const shutdown = async (signal: string) => {
     app.log.info({ signal }, "Shutting down gracefully");
     try {
       await app.close();
-      // Day 4: also close the Postgres pool here, before exiting.
+      await pool.end();
       process.exit(0);
     } catch (err) {
       app.log.error({ err }, "Error during shutdown");
@@ -21,6 +29,7 @@ async function main() {
 
   try {
     await app.listen({ port: env.PORT, host: "0.0.0.0" });
+    app.log.info({ port: env.PORT }, "Server listening");
   } catch (err) {
     app.log.error({ err }, "Failed to start server");
     process.exit(1);
