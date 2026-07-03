@@ -1,0 +1,123 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # ─────────────────────────────────────────────
+  #  CI: verify & test (runs on PRs AND main)
+  # ─────────────────────────────────────────────
+  ci:
+    name: CI — Verify & Test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm run test:unit
+
+  # ─────────────────────────────────────────────
+  #  Build & push image (only on main)
+  # ─────────────────────────────────────────────
+  build:
+    name: Build & Push Image
+    if: github.ref == 'refs/heads/main'
+    needs: ci
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+  # ─────────────────────────────────────────────
+  #  CD: deploy to OCI VM (only on main)
+  # ─────────────────────────────────────────────
+  deploy:
+    name: CD — Deploy to OCI
+    if: github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          envs: DB_PASSWORD
+          script: |
+            set -e
+
+            echo "→ Pulling latest image..."
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            docker compose -f /opt/pricing-service/docker-compose.prod.yml pull
+
+            echo "→ Running database migrations..."
+            docker compose -f /opt/pricing-service/docker-compose.prod.yml run --rm pricing-api npm run migrate
+
+            echo "→ Starting services..."
+            docker compose -f /opt/pricing-service/docker-compose.prod.yml up -d
+
+            echo "→ Waiting for API readiness..."
+            for i in $(seq 1 12); do
+              READY=$(curl -sf http://localhost:3001/ready 2>/dev/null || echo "")
+              if echo "$READY" | grep -q '"db":"connected"'; then
+                echo "✓ API is ready (DB connected)"
+                break
+              fi
+              if [ "$i" -eq 12 ]; then
+                echo "✗ API not ready after 12 attempts — rolling back..."
+                docker compose -f /opt/pricing-service/docker-compose.prod.yml down
+                exit 1
+              fi
+              echo "  attempt $i/12 — waiting..." && sleep 5
+            done
+
+            echo "→ Cleaning old images..."
+            docker image prune -f --filter "until=24h"
+
+            echo "✓ Deploy complete"
