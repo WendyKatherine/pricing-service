@@ -7,7 +7,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository_owner_lowercase }}/pricing-service
+  IMAGE_NAME: wendykatherine/pricing-service
 
 jobs:
   # ─────────────────────────────────────────────
@@ -80,9 +80,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write
+      packages: read
     env:
-      DB_PASSWORD: *** secrets.DB_PASSWORD }}
+      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
 
     steps:
       - name: Deploy via SSH
