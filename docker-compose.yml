@@ -1,0 +1,34 @@
+services:
+  pricing-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: run
+    ports:
+      - "3001:3001"
+    environment:
+      NODE_ENV: "development"
+      DATABASE_URL: "postgres://pricing:pricing@db:5432/pricing_dev"
+      TZ: "America/Bogota"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: "pricing"
+      POSTGRES_PASSWORD: "85f4b73a02d65cf7dda772318ca3ae1f0ac77759e9919b27"
+      POSTGRES_DB: "pricing_dev"
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pricing -d pricing_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:

@@ -1,6 +1,10 @@
 node_modules
 dist
 .env
+.env.*
 .git
+.github
 coverage
+test
 *.log
+*.md
