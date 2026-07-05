@@ -1,6 +1,7 @@
 import Fastify, { FastifyInstance } from "fastify";
 import { env } from "../config/env";
 import { healthRoute } from "./routes/health.route";
+import httpMetricsPlugin from "../observability/httpMetrics.plugin";
 
 export function buildServer(): FastifyInstance {
   const app = Fastify({
@@ -8,6 +9,7 @@ export function buildServer(): FastifyInstance {
   });
 
   app.register(healthRoute);
+  app.register(httpMetricsPlugin);
 
   return app;
 }

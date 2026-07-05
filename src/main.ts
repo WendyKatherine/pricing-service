@@ -4,6 +4,8 @@ import { createPool } from "./infrastructure/db/pool";
 import { PostgresPriceBookRepository } from "./infrastructure/repositories/PostgresPriceBookRepository";
 import { readyRoute } from "./infrastructure/http/routes/ready.route";
 import { quoteRoute } from "./infrastructure/http/routes/quote.route";
+import { metricsRoute } from "./infrastructure/http/routes/metrics.route";
+import { setPoolTarget } from "./infrastructure/observability/poolMetrics";
 
 async function main() {
   const pool = createPool();
@@ -16,6 +18,9 @@ async function main() {
     prefix: "/api/v1",
     priceBookRepository,
   });
+  app.register(metricsRoute);
+
+  setPoolTarget(pool);
 
   const shutdown = async (signal: string) => {
     app.log.info({ signal }, "Shutting down gracefully");
