@@ -31,15 +31,15 @@ Clean Architecture with a strict dependency rule: **inner layers know nothing
 about outer layers.**
 
 ```
-┌─────────────────────────────────────────────┐
+┌──────────────────────────────────────────────┐
 │  Infrastructure  (Fastify, Postgres, config) │  ← depends on ↓
-│  ┌───────────────────────────────────────┐  │
+│  ┌────────────────────────────────────────┐  │
 │  │  Application  (use cases, repo ports)  │  │  ← depends on ↓
-│  │  ┌─────────────────────────────────┐  │  │
-│  │  │  Domain  (quote engine, types)  │  │  │  ← depends on nothing
-│  │  └─────────────────────────────────┘  │  │
-│  └───────────────────────────────────────┘  │
-└─────────────────────────────────────────────┘
+│  │  ┌─────────────────────────────────┐   │  │
+│  │  │  Domain  (quote engine, types)  │   │  │  ← depends on nothing
+│  │  └─────────────────────────────────┘   │  │
+│  └────────────────────────────────────────┘  │
+└──────────────────────────────────────────────┘
 ```
 
 - **Domain** — pure business logic (quote engine, resolvers, types). No I/O, no
